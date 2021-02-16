@@ -16,30 +16,22 @@
 
 package com.example.android.treasureHunt
 
-import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.Manifest
 import android.annotation.TargetApi
-import android.content.IntentSender
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.SavedStateViewModelFactory
 import androidx.lifecycle.ViewModelProvider
 import com.example.android.treasureHunt.databinding.ActivityHuntMainBinding
-import com.google.android.gms.common.api.ResolvableApiException
-import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingClient
-import com.google.android.gms.location.GeofencingRequest
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.LocationSettingsRequest
 import com.google.android.material.snackbar.Snackbar
 
 /**
@@ -120,8 +112,46 @@ class HuntMainActivity : AppCompatActivity() {
         permissions: Array<String>,
         grantResults: IntArray
     ) {
-        // TODO: Step 5 add code to handle the result of the user's permission
+        Log.d(TAG, "onRequestPermissionResult")
+        if (requiredPermissionsDenied(grantResults, requestCode))
+            showPermissionDeniedExplanation()
+        else
+            checkDeviceLocationSettingsAndStartGeofence()
     }
+
+    private fun requiredPermissionsDenied(
+        grantResults: IntArray,
+        requestCode: Int
+    ): Boolean {
+        val locationPermissionDenied =
+            grantResults[LOCATION_PERMISSION_INDEX] == PackageManager.PERMISSION_DENIED
+        val backgroundPermissionDenied = grantResults[BACKGROUND_LOCATION_PERMISSION_INDEX] ==
+                PackageManager.PERMISSION_DENIED
+        return permissionRequestCancelled(grantResults) ||
+                locationPermissionDenied ||
+                (requestCode == REQUEST_FOREGROUND_AND_BACKGROUND_PERMISSION_RESULT_CODE &&
+                        backgroundPermissionDenied)
+    }
+
+    private fun showPermissionDeniedExplanation() {
+        Snackbar.make(
+            binding.activityMapsMain,
+            R.string.permission_denied_explanation,
+            Snackbar.LENGTH_INDEFINITE
+        )
+            .setAction(R.string.settings) { onConfirmPermissionDeniedExplanation() }
+            .show()
+    }
+
+    private fun onConfirmPermissionDeniedExplanation() {
+        startActivity(Intent().apply {
+            action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+            data = Uri.fromParts("package", BuildConfig.APPLICATION_ID, null)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        })
+    }
+
+    private fun permissionRequestCancelled(grantResults: IntArray) = grantResults.isEmpty()
 
     /**
      * This will also destroy any saved state in the associated ViewModel, so we remove the
@@ -157,19 +187,40 @@ class HuntMainActivity : AppCompatActivity() {
      *  Determines whether the app has the appropriate permissions across Android 10+ and all other
      *  Android versions.
      */
-    @TargetApi(29)
+    @TargetApi(Build.VERSION_CODES.Q)
     private fun foregroundAndBackgroundLocationPermissionApproved(): Boolean {
-        // TODO: Step 3 replace this with code to check that the foreground and background
-        //  permissions were approved
-        return false
+        val foregroundLocationApproved =
+            checkPermissionGranted(Manifest.permission.ACCESS_FINE_LOCATION)
+        val backgroundPermissionApproved =
+            if (runningQOrLater) {
+                checkPermissionGranted(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            } else {
+                true
+            }
+        return foregroundLocationApproved && backgroundPermissionApproved
     }
 
     /*
      *  Requests ACCESS_FINE_LOCATION and (on Android 10+ (Q) ACCESS_BACKGROUND_LOCATION.
      */
-    @TargetApi(29 )
+    @TargetApi(Build.VERSION_CODES.Q)
     private fun requestForegroundAndBackgroundLocationPermissions() {
-        // TODO: Step 4 add code to request foreground and background permissions
+        if (foregroundAndBackgroundLocationPermissionApproved())
+            return
+        var permissionsArray = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        val resultCode = when {
+            runningQOrLater -> {
+                permissionsArray += Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                REQUEST_FOREGROUND_AND_BACKGROUND_PERMISSION_RESULT_CODE
+            }
+            else -> REQUEST_FOREGROUND_ONLY_PERMISSIONS_REQUEST_CODE
+        }
+        Log.d(TAG, "Request foreground only location permission")
+        ActivityCompat.requestPermissions(
+            this@HuntMainActivity,
+            permissionsArray,
+            resultCode
+        )
     }
 
     /*
