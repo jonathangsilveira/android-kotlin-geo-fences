@@ -75,8 +75,7 @@ class HuntMainActivity : AppCompatActivity() {
             this)).get(GeofenceViewModel::class.java)
         binding.viewmodel = viewModel
         binding.lifecycleOwner = this
-        // TODO: Step 9 instantiate the geofencing client
-
+        geofencingClient = LocationServices.getGeofencingClient(this)
         // Create channel for notifications
         createChannel(this )
     }
