@@ -16,10 +16,10 @@
 
 package com.example.android.treasureHunt
 
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.Manifest
 import android.annotation.TargetApi
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -123,14 +123,10 @@ class HuntMainActivity : AppCompatActivity() {
         grantResults: IntArray,
         requestCode: Int
     ): Boolean {
-        val locationPermissionDenied =
-            grantResults[LOCATION_PERMISSION_INDEX] == PackageManager.PERMISSION_DENIED
-        val backgroundPermissionDenied = grantResults[BACKGROUND_LOCATION_PERMISSION_INDEX] ==
-                PackageManager.PERMISSION_DENIED
         return permissionRequestCancelled(grantResults) ||
-                locationPermissionDenied ||
+                grantResults[LOCATION_PERMISSION_INDEX] == PackageManager.PERMISSION_DENIED ||
                 (requestCode == REQUEST_FOREGROUND_AND_BACKGROUND_PERMISSION_RESULT_CODE &&
-                        backgroundPermissionDenied)
+                        grantResults[BACKGROUND_LOCATION_PERMISSION_INDEX] == PackageManager.PERMISSION_DENIED)
     }
 
     private fun showPermissionDeniedExplanation() {
