@@ -17,6 +17,7 @@
 package com.example.android.treasureHunt
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.annotation.TargetApi
 import android.app.PendingIntent
 import android.content.Intent
@@ -27,6 +28,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.databinding.DataBindingUtil
@@ -34,12 +36,8 @@ import androidx.lifecycle.SavedStateViewModelFactory
 import androidx.lifecycle.ViewModelProvider
 import com.example.android.treasureHunt.databinding.ActivityHuntMainBinding
 import com.google.android.gms.common.api.ResolvableApiException
-import com.google.android.gms.location.GeofencingClient
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.LocationSettingsRequest
+import com.google.android.gms.location.*
 import com.google.android.material.snackbar.Snackbar
-
 /**
  * The Treasure Hunt app is a single-player game based on geofences.
  *
@@ -270,8 +268,67 @@ class HuntMainActivity : AppCompatActivity() {
      * no more geofences, we remove the geofence and let the viewmodel know that the ending hint
      * is now "active."
      */
+    @SuppressLint("MissingPermission")
     private fun addGeofenceForClue() {
-        // TODO: Step 10 add in code to add the geofence
+        if (viewModel.geofenceIsActive()) return
+        val currentGeofenceIndex = viewModel.nextGeofenceIndex()
+        if(currentGeofenceIndex >= GeofencingConstants.NUM_LANDMARKS) {
+            removeGeofences()
+            viewModel.geofenceActivated()
+            return
+        }
+
+        val currentGeofenceData = GeofencingConstants.LANDMARK_DATA[currentGeofenceIndex]
+        val geofence = buildGeofence(currentGeofenceData)
+        val geofencingRequest = buildGeofencingRequest(geofence)
+
+        geofencingClient.removeGeofences(geofencePendingIntent)?.run {
+            addOnCompleteListener {
+                geofencingClient.addGeofences(geofencingRequest, geofencePendingIntent)?.run {
+                    addOnSuccessListener {
+                        showGeofencesAddedToast()
+                        Log.e("Add Geofence", geofence.requestId)
+                        viewModel.geofenceActivated()
+                    }
+                    addOnFailureListener {
+                        showGeofencesNotAddedToast()
+                        if ((it.message != null)) {
+                            Log.w(TAG, it.message.orEmpty())
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun buildGeofencingRequest(geofence: Geofence): GeofencingRequest {
+        return GeofencingRequest.Builder()
+                .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
+                .addGeofence(geofence)
+                .build()
+    }
+
+    private fun buildGeofence(currentGeofenceData: LandmarkDataObject): Geofence {
+        return Geofence.Builder()
+                .setRequestId(currentGeofenceData.id)
+                .setCircularRegion(currentGeofenceData.latLong.latitude,
+                        currentGeofenceData.latLong.longitude,
+                        GeofencingConstants.GEOFENCE_RADIUS_IN_METERS
+                )
+                .setExpirationDuration(GeofencingConstants.GEOFENCE_EXPIRATION_IN_MILLISECONDS)
+                .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER)
+                .build()
+    }
+
+    private fun showGeofencesNotAddedToast() {
+        Toast.makeText(this@HuntMainActivity, R.string.geofences_not_added,
+                Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showGeofencesAddedToast() {
+        Toast.makeText(this@HuntMainActivity, R.string.geofences_added,
+                Toast.LENGTH_SHORT)
+                .show()
     }
 
     /**
@@ -286,6 +343,7 @@ class HuntMainActivity : AppCompatActivity() {
             "HuntMainActivity.treasureHunt.action.ACTION_GEOFENCE_EVENT"
     }
 }
+
 
 private const val REQUEST_FOREGROUND_AND_BACKGROUND_PERMISSION_RESULT_CODE = 33
 private const val REQUEST_FOREGROUND_ONLY_PERMISSIONS_REQUEST_CODE = 34
