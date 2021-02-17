@@ -19,6 +19,7 @@ package com.example.android.treasureHunt
 import android.Manifest
 import android.annotation.TargetApi
 import android.content.Intent
+import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -31,7 +32,11 @@ import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.SavedStateViewModelFactory
 import androidx.lifecycle.ViewModelProvider
 import com.example.android.treasureHunt.databinding.ActivityHuntMainBinding
+import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.GeofencingClient
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.LocationSettingsRequest
 import com.google.android.material.snackbar.Snackbar
 
 /**
@@ -175,8 +180,43 @@ class HuntMainActivity : AppCompatActivity() {
      *  Uses the Location Client to check the current state of location settings, and gives the user
      *  the opportunity to turn on location services within our app.
      */
-    private fun checkDeviceLocationSettingsAndStartGeofence(resolve:Boolean = true) {
-        // TODO: Step 6 add code to check that the device's location is on
+    private fun checkDeviceLocationSettingsAndStartGeofence(resolve: Boolean = true) {
+        val locationRequest = createLocationRequest()
+        val builder = LocationSettingsRequest.Builder().addLocationRequest(locationRequest)
+        val settingsClient = LocationServices.getSettingsClient(this)
+        val locationSettingsResponseTask = settingsClient.checkLocationSettings(builder.build())
+        locationSettingsResponseTask.addOnFailureListener { exception ->
+            if (exception is ResolvableApiException && resolve){
+                try {
+                    exception.startResolutionForResult(this@HuntMainActivity,
+                            REQUEST_TURN_DEVICE_LOCATION_ON)
+                } catch (sendEx: IntentSender.SendIntentException) {
+                    Log.d(TAG, "Error getting location settings resolution: " + sendEx.message)
+                }
+            } else {
+                showLocationRequiredMessage()
+            }
+        }
+        locationSettingsResponseTask.addOnCompleteListener {
+            if ( it.isSuccessful ) {
+                addGeofenceForClue()
+            }
+        }
+    }
+
+    private fun showLocationRequiredMessage() {
+        Snackbar.make(
+                binding.activityMapsMain,
+                R.string.location_required_error, Snackbar.LENGTH_INDEFINITE
+        ).setAction(android.R.string.ok) {
+            checkDeviceLocationSettingsAndStartGeofence()
+        }.show()
+    }
+
+    private fun createLocationRequest(): LocationRequest {
+        return LocationRequest.create().apply {
+            priority = LocationRequest.PRIORITY_LOW_POWER
+        }
     }
 
     /*
